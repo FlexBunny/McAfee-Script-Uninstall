@@ -327,6 +327,22 @@ function Remove-PostRebootTask {
     catch {}
 }
 
+# Removes a stale McAfee registration from Windows Security Center so Defender
+# takes over real-time protection. Only called once McAfee is confirmed removed.
+function Remove-McAfeeSecurityCenterEntry {
+    try {
+        $av = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction SilentlyContinue |
+              Where-Object { $_.displayName -like '*McAfee*' }
+        foreach ($item in $av) {
+            Remove-CimInstance -InputObject $item -ErrorAction Stop
+            Write-Log ("Removed Security Center entry: {0}" -f $item.displayName) "INFO"
+        }
+    }
+    catch {
+        Write-Log ("Failed to remove McAfee Security Center entry: {0}" -f $_) "WARNING"
+    }
+}
+
 ### Working Folder ###
 $DebloatFolder = "C:\ProgramData\Debloat"
 if (-not (Test-Path $DebloatFolder)) {
@@ -376,6 +392,7 @@ switch ($status.State) {
     0 {
         Write-Log "Pre-check: McAfee appears cleanly uninstalled (no registry traces and no residual files)." "INFO"
         Clear-RebootMarker -MarkerPath $RebootMarkerPath
+        Remove-McAfeeSecurityCenterEntry
         if ($PostReboot) { Remove-PostRebootTask }
         exit 0
     }
@@ -397,8 +414,8 @@ switch ($status.State) {
 
 ### URLs ###
 # Note: ServiceUI is no longer used.
-$McAfeeCleanZipUrl  = "https://github.com/Flexbunny/McAfee_Removal/raw/refs/heads/main/mcafeeclean.zip"
-$McCleanupZipUrl    = "https://github.com/Flexbunny/McAfee_Removal/raw/refs/heads/main/mccleanup.zip"
+$McAfeeCleanZipUrl  = "https://github.com/FlexBunny/McAfee-Script-Uninstall/raw/refs/heads/main/mcafeeclean.zip"
+$McCleanupZipUrl    = "https://github.com/FlexBunny/McAfee-Script-Uninstall/raw/refs/heads/main/mccleanup.zip"
 
 # Local file paths
 $McAfeeCleanZipPath = Join-Path $DebloatFolder "mcafeeclean.zip"
@@ -645,6 +662,7 @@ switch ($status.State) {
     0 {
         Write-Log "Final detection: McAfee is cleanly uninstalled." "INFO"
         Clear-RebootMarker -MarkerPath $RebootMarkerPath
+        Remove-McAfeeSecurityCenterEntry
         if ($PostReboot) { Remove-PostRebootTask }
         exit 0
     }
